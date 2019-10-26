@@ -37,6 +37,8 @@ public class WebSocketAccountsAndOrders extends WebSocketClient {
      */
     private String aOTopic = "orders.eth";
 
+    private String marketTopic = "market.BTC_CQ.kline.1min";
+
 
     public WebSocketAccountsAndOrders(URI uri, String accessKey, String secretKey) {
         super(uri, new Draft_17());
@@ -52,7 +54,9 @@ public class WebSocketAccountsAndOrders extends WebSocketClient {
      * Build connection
      */
     public void onOpen(ServerHandshake shake) {
-        addAuth();
+        log.info("onOpen " + shake);
+//        addAuth();
+        sendSubKline("BTC_CQ", "1min");
     }
 
     @Override
@@ -109,10 +113,19 @@ public class WebSocketAccountsAndOrders extends WebSocketClient {
 //    接收服务器信息 并进行解压
 //	  Receive server information and decompress
             String message = new String(ZipUtil.decompress(bytes.array()), "UTF-8");
-            System.out.println(message);
+            System.out.println("onMessage:"+message);
 //    将信息转为放入JSONObject
 //	  Convert information into JSONObject            
             JSONObject jsonObject = JSONObject.parseObject(message);
+
+            Long ping = jsonObject.getLong("ping");
+
+            if (null != ping) {
+                String pong = jsonObject.toString();
+                send(pong.replace("ping", "pong"));
+                sendSub(marketTopic, "12123");
+                return;
+            }
 
             String op = jsonObject.getString("op");
 
@@ -135,7 +148,7 @@ public class WebSocketAccountsAndOrders extends WebSocketClient {
 
                         //鉴权成功发送sub 请求
                     	//successful authentication sending sub request
-                        sendSub(aOTopic, "12123");
+                        sendSub(marketTopic, "12123");
                     }
                 } else if ("sub".equals(op)) {
                     if (errCode == 0) {
@@ -143,7 +156,7 @@ public class WebSocketAccountsAndOrders extends WebSocketClient {
                     }
                     //  结束的服务器消息处理 message 为接收到消息
                     //	Server info handle message as receiving info
-                    log.info(message);
+                    log.info("\"sub\".equals(op)"+message);
                 }else if ("notify".equals(op)) {
                     //这里接收到订单的推送消息，做业务处理
                 	//Receive order push and do operation processing
@@ -179,7 +192,7 @@ public class WebSocketAccountsAndOrders extends WebSocketClient {
         map.put("type", "api");
 
         String req = JSON.toJSONString(map);
-        log.info("before send ");
+        log.info("before send " + req);
         send(req);
         log.info("after send ");
     }
@@ -250,6 +263,14 @@ public class WebSocketAccountsAndOrders extends WebSocketClient {
         if (symbol != null) {
             req.put("states", states);
         }
+        send(req.toString());
+    }
+
+    public void sendSubKline(String symbol, String period){
+        String topic = String.format("market.%s.kline.%s", symbol, period);
+        JSONObject req = new JSONObject();
+        req.put("sub", topic);
+        req.put("id", "id1");
         send(req.toString());
     }
 
